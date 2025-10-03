@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { useTheme } from "../context/ThemeContext";
 import LogoHeader from "../components/LogoHeader";
 import Feather from "react-native-vector-icons/Feather";
 import { useRouter } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_IP } from "@env";
 
 
 export default function LoginScreen() {
@@ -14,6 +15,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please fill in all fields");
@@ -21,7 +23,7 @@ export default function LoginScreen() {
     }
 
     try {
-      const res = await fetch("http://192.168.254.193:5000/login", {
+      const res = await fetch(`http://${API_IP}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

@@ -1,15 +1,36 @@
-import React, { useState, useRef } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from "react-native";
+import React, { useState, useRef,useEffect } from "react";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity,ActivityIndicator } from "react-native";
 import { useTheme } from "../context/ThemeContext";
 import LogoHeader from "../components/LogoHeader";
 import Feather from "react-native-vector-icons/Feather";
+// import { API_IP } from "@env";
+import Constants from "expo-constants";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+
 // import { useNavigation } from '@react-navigation/native';
 import { useRouter } from "expo-router";
 // import LoginScreen from './src/screens/LoginScreen';
+const { API_IP } = Constants.expoConfig.extra;
 
 export default function SignUpScreen() {
   const { theme } = useTheme();
   const [showOtp, setShowOtp] = useState(false);
+  const [loading,setLoading] = useState(true)
+
+  useEffect(()=>{
+      async function checkUser(){
+        const user=await AsyncStorage.getItem("user");
+        if(user){
+          setLoading(false)
+          router.replace("/home")
+        }
+        else{
+          setLoading(false)
+        }
+      }
+      checkUser()
+  },[])
 
   // const navigation = useNavigation();
   const router = useRouter();
@@ -37,7 +58,7 @@ const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
   }
 
   try {
-    const res = await fetch("http://192.168.254.193:5000/send-otp", {
+    const res = await fetch(`http://${API_IP}/send-otp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
@@ -68,7 +89,7 @@ const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
 const handleSubmitOtp = async () => {
   try {
     const otp = otpDigits.join("");
-    const res = await fetch("http://192.168.254.193:5000/verify-otp", {
+    const res = await fetch(`http://${API_IP}/verify-otp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fullName, email, salary, password, otp }),
@@ -87,6 +108,15 @@ const handleSubmitOtp = async () => {
     alert("Error verifying OTP");
   }
 };
+
+if(loading){
+  return(
+    <View style={{flex:1,justifyContent:"center",alignItems:"center"}}>
+        <ActivityIndicator size="large" color="#007BFF" />
+    </View>
+    
+  )
+}
 
 
   return (
