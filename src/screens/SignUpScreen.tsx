@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity } from "react-nativ
 import { useTheme } from "../context/ThemeContext";
 import LogoHeader from "../components/LogoHeader";
 import Feather from "react-native-vector-icons/Feather";
+import { API_IP } from "@env";
 // import { useNavigation } from '@react-navigation/native';
 import { useRouter } from "expo-router";
 // import LoginScreen from './src/screens/LoginScreen';
@@ -37,7 +38,7 @@ const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
   }
 
   try {
-    const res = await fetch("http://192.168.254.193:5000/send-otp", {
+    const res = await fetch(`http://${API_IP}/send-otp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
@@ -68,7 +69,7 @@ const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
 const handleSubmitOtp = async () => {
   try {
     const otp = otpDigits.join("");
-    const res = await fetch("http://192.168.254.193:5000/verify-otp", {
+    const res = await fetch(`http://${API_IP}/verify-otp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fullName, email, salary, password, otp }),

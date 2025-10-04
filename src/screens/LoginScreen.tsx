@@ -5,7 +5,7 @@ import LogoHeader from "../components/LogoHeader";
 import Feather from "react-native-vector-icons/Feather";
 import { useRouter } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import {API_IP} from "@env";
 
 export default function LoginScreen() {
   const { theme } = useTheme();
@@ -21,7 +21,7 @@ export default function LoginScreen() {
     }
 
     try {
-      const res = await fetch("http://192.168.254.193:5000/login", {
+      const res = await fetch(`http://${API_IP}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
