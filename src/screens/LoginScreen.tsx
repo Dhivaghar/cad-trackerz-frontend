@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { useTheme } from "../context/ThemeContext";
 import LogoHeader from "../components/LogoHeader";
 import Feather from "react-native-vector-icons/Feather";
 import { useRouter } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {API_IP} from "@env";
+import Constants from 'expo-constants';
+const API_IP = Constants.expoConfig?.extra?.API_IP || "127.0.0.1";
 
 export default function LoginScreen() {
   const { theme } = useTheme();
@@ -13,6 +14,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+
 
   const handleLogin = async () => {
     if (!email || !password) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, StyleSheet, SectionList, TouchableOpacity } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -7,8 +7,48 @@ import { useTheme } from "../context/ThemeContext";
 import BottomNav from "../components/BottomNav";
 import LogoHeader from "../components/LogoHeader";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { API_IP } from "@env";
 
-export default function HistoryPage() {
+const categoryIcons = {
+  Groceries: "cart-outline",
+  "Dining Out / Restaurants": "fast-food-outline",
+  Entertainment: "film-outline",
+  Shopping: "pricetag-outline",
+  "Travel & Vacation": "airplane-outline",
+  "Medical & Healthcare": "medkit-outline",
+  Utilities: "flash-outline",
+  "Rent / Housing": "home-outline",
+  Transportation: "car-outline",
+  Insurance: "shield-outline",
+  "Loan / EMI Payments": "cash-outline",
+  "Childcare / Education Fees": "school-outline",
+  "Phone & Internet Bills": "call-outline",
+  "Emergency Fund": "alert-outline",
+  "FD / RD": "wallet-outline",
+  "Mutual Funds / SIP": "trending-up-outline",
+  "Stock Market Investments": "stats-chart-outline",
+  "Retirement Fund": "hourglass-outline",
+  "Gifts & Celebrations": "gift-outline",
+  "Home Décor / Luxury Items": "color-palette-outline",
+  "Debt Repayment": "remove-circle-outline",
+  "Digital Wallet / Savings Account": "card-outline",
+  Fitness: "barbell-outline",
+  Other: "ellipsis-horizontal-outline",
+};
+
+function groupByDate(expenses) {
+  const groups = {};
+  expenses.forEach((exp) => {
+    const dateStr = new Date(exp.expense_date || exp.date).toDateString();
+    if (!groups[dateStr]) groups[dateStr] = [];
+    groups[dateStr].push(exp);
+  });
+  return Object.keys(groups)
+    .sort((a, b) => new Date(b) - new Date(a))
+    .map((date) => ({ title: date, data: groups[date] }));
+}
+
+export default function HistoryScreen() {
   const { theme } = useTheme();
   const [expenses, setExpenses] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -19,11 +59,19 @@ export default function HistoryPage() {
 
   useEffect(() => {
     const fetchExpenses = async () => {
-      const stored = await AsyncStorage.getItem("expenses");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setExpenses(parsed);
-        filterExpenses(parsed, fromDate, toDate);
+      try {
+        const storedUser = await AsyncStorage.getItem("user");
+        if (!storedUser) return;
+        const user = JSON.parse(storedUser);
+        const response = await fetch(`${API_IP}/expenses/${user.id}`);
+        if (!response.ok) throw new Error("Failed to fetch expenses");
+        const data = await response.json();
+        setExpenses(data);
+        filterExpenses(data, fromDate, toDate);
+      } catch (err) {
+        console.error("Failed to fetch expenses", err);
+        setExpenses([]);
+        setFiltered([]);
       }
     };
     fetchExpenses();
@@ -31,7 +79,7 @@ export default function HistoryPage() {
 
   const filterExpenses = (data, from, to) => {
     const filteredData = data.filter((exp) => {
-      const expDate = new Date(exp.date);
+      const expDate = new Date(exp.expense_date || exp.date);
       return expDate >= from && expDate <= to;
     });
     setFiltered(filteredData);
@@ -54,58 +102,68 @@ export default function HistoryPage() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 80 }}>
-        <LogoHeader />
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background, padding:10 }}>
+      <LogoHeader />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <Ionicons name="time-outline" size={28} color={theme.primary} />
-          <Text style={[styles.title, { color: theme.text }]}>Expense History</Text>
-        </View>
+      <View style={styles.header}>
+        <Ionicons name="time-outline" size={28} color={theme.primary} />
+        <Text style={[styles.title, { color: theme.text }]}>Expense History</Text>
+      </View>
 
-        {/* Date Range */}
-        <View style={styles.dateRow}>
-          <TouchableOpacity
-            style={[styles.dateBtn, { borderColor: theme.primary }]}
-            onPress={() => setShowFromPicker(true)}
-          >
-            <Text style={{ color: theme.text }}>From: {fromDate.toDateString()}</Text>
-          </TouchableOpacity>
+      <View style={styles.dateRow}>
+        <TouchableOpacity
+          style={[styles.dateBtn, { borderColor: theme.primary }]}
+          onPress={() => setShowFromPicker(true)}
+        >
+          <Text style={{ color: theme.text }}>From: {fromDate.toDateString()}</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.dateBtn, { borderColor: theme.primary }]}
-            onPress={() => setShowToPicker(true)}
-          >
-            <Text style={{ color: theme.text }}>To: {toDate.toDateString()}</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={[styles.dateBtn, { borderColor: theme.primary }]}
+          onPress={() => setShowToPicker(true)}
+        >
+          <Text style={{ color: theme.text }}>To: {toDate.toDateString()}</Text>
+        </TouchableOpacity>
+      </View>
 
-        {showFromPicker && (
-          <DateTimePicker value={fromDate} mode="date" display="default" onChange={handleFromChange} />
+      {showFromPicker && (
+        <DateTimePicker value={fromDate} mode="date" display="default" onChange={handleFromChange} />
+      )}
+      {showToPicker && (
+        <DateTimePicker value={toDate} mode="date" display="default" onChange={handleToChange} />
+      )}
+
+      <SectionList
+        sections={groupByDate(filtered)}
+        keyExtractor={(item, index) => index.toString()}
+        renderSectionHeader={({ section: { title } }) => (
+          <Text style={[styles.sectionHeader, { color: theme.primary }]}>{title}</Text>
         )}
-        {showToPicker && (
-          <DateTimePicker value={toDate} mode="date" display="default" onChange={handleToChange} />
-        )}
-
-        {/* Expense List */}
-        <FlatList
-          data={filtered}
-          keyExtractor={(item, index) => index.toString()}
-          renderItem={({ item }) => (
-            <View style={[styles.card, { backgroundColor: theme.card || "#fff" }]}>
-              <Text style={[styles.category, { color: theme.text }]}>{item.category}</Text>
-              <Text style={{ color: theme.text }}>₹{item.amount}</Text>
-              <Text style={{ color: theme.text, fontSize: 12 }}>
-                {new Date(item.date).toLocaleString()}
-              </Text>
+        renderItem={({ item }) => (
+          <View style={[styles.card, { backgroundColor: theme.background || "#fff" }]}>
+            <View style={styles.cardRow}>
+              <Ionicons
+                name={categoryIcons[item.category] || categoryIcons["Other"]}
+                size={32}
+                color={theme.primary}
+                style={{ marginRight: 12 }}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.category, { color: theme.text }]}>{item.category}</Text>
+                {item.note ? (
+                  <Text style={[styles.note, { color: theme.text }]} numberOfLines={1}>
+                    {item.note}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={[styles.amount, { color: theme.primary }]}>₹{item.amount}</Text>
             </View>
-          )}
-          ListEmptyComponent={<Text style={{ color: theme.text }}>No expenses found</Text>}
-        />
-      </ScrollView>
+          </View>
+        )}
+        ListEmptyComponent={<Text style={{ color: theme.text, textAlign: "center", marginTop: 30 }}>No expenses found</Text>}
+        contentContainerStyle={{ padding: 15, paddingBottom: 80 }}
+      />
 
-      {/* Fixed Bottom Navigation */}
       <BottomNav />
     </SafeAreaView>
   );
@@ -122,14 +180,27 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 5,
   },
+  sectionHeader: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginTop: 18,
+    marginBottom: 6,
+    marginLeft: 4,
+  },
   card: {
-    padding: 12,
-    borderRadius: 10,
-    marginVertical: 6,
+    padding: 14,
+    borderRadius: 12,
+    marginVertical: 4,
     shadowColor: "#000",
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.07,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    elevation: 2,
+  },
+  cardRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   category: { fontSize: 16, fontWeight: "600" },
+  note: { fontSize: 13, opacity: 0.7 },
+  amount: { fontSize: 17, fontWeight: "bold", marginLeft: 10 },
 });
