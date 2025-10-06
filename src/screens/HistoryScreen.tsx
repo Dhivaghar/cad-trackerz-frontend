@@ -140,7 +140,9 @@ export default function HistoryScreen() {
           <Text style={[styles.sectionHeader, { color: theme.primary }]}>{title}</Text>
         )}
         renderItem={({ item }) => (
-          <View style={[styles.card, { backgroundColor: theme.background || "#fff" }]}>
+          <View style={[styles.card, { backgroundColor: theme.background || "#fff",
+            shadowColor: theme.mode === "dark" ? "#fff" : "#000",
+           }]}>
             <View style={styles.cardRow}>
               <Ionicons
                 name={categoryIcons[item.category] || categoryIcons["Other"]}
@@ -170,7 +172,7 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 15, justifyContent:"center" },
   title: { fontSize: 20, fontWeight: "bold", marginLeft: 10 },
   dateRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 15 },
   dateBtn: {
@@ -191,7 +193,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     marginVertical: 4,
-    shadowColor: "#000",
+    // shadowColor: theme.background === "#000" ? "#fff" : "#000",
     shadowOpacity: 0.07,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,

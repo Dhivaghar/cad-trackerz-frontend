@@ -6,12 +6,14 @@ const themes = {
     text: "#000",
     primary: "#005370",
     accent: "#f9c73f",
+    mode: "light",
   },
   dark: {
     background: "#121212",
     text: "#fff",
     primary: "#f9c73f",
     accent: "#005370",
+    mode: "dark",
   },
 };
 

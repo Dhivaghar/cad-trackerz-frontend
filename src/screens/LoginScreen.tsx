@@ -23,7 +23,7 @@ export default function LoginScreen() {
     }
 
     try {
-      const res = await fetch(`http://${API_IP}/login`, {
+      const res = await fetch(`${API_IP}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
