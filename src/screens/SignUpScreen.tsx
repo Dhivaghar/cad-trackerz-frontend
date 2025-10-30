@@ -87,7 +87,7 @@ const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
 const handleSubmitOtp = async () => {
   try {
     const otp = otpDigits.join("");
-    const res = await fetch(`http://${API_IP}/verify-otp`, {
+    const res = await fetch(`${API_IP}/verify-otp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fullName, email, salary, password, otp }),

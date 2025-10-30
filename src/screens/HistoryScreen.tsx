@@ -63,7 +63,7 @@ export default function HistoryScreen() {
         const storedUser = await AsyncStorage.getItem("user");
         if (!storedUser) return;
         const user = JSON.parse(storedUser);
-        const response = await fetch(`${API_IP}/expenses/${user.id}`);
+        const response = await fetch(`${API_IP}/expenses/all/${user.id}`);
         if (!response.ok) throw new Error("Failed to fetch expenses");
         const data = await response.json();
         setExpenses(data);
