@@ -17,27 +17,46 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
 import { useIsFocused } from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 
-const API_IP = Constants.expoConfig?.extra?.API_IP || "127.0.0.1";
+// ✅ Notification handler (always at top)
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+const API_IP = Constants.expoConfig?.extra?.API_IP || "http://127.0.0.1:5000";
 
 export default function HomeScreen() {
   const { theme } = useTheme();
   const [category, setCategory] = useState("Groceries");
   const [amount, setAmount] = useState("");
   const [expenses, setExpenses] = useState([]);
-  const [user, setUser] = useState({});
+  const [user, setUser] = useState<any>({});
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const isFocused = useIsFocused();
 
-  // 🟩 Common fetch function for user & expenses
+  // ✅ Ask notification permission once (INSIDE component)
+  useEffect(() => {
+    (async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission required", "Enable notifications for alerts.");
+      }
+    })();
+  }, []);
+
+  // 🟩 Fetch user + expenses
   const fetchData = async () => {
     try {
       const storedUser = await AsyncStorage.getItem("user");
       if (storedUser) {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
-
         const response = await fetch(`${API_IP}/expenses/${parsedUser.id}`);
         const data = await response.json();
         setExpenses(data);
@@ -49,60 +68,103 @@ export default function HomeScreen() {
     }
   };
 
-  // 🟩 Fetch when focused (user navigates to Home)
   useEffect(() => {
     fetchData();
   }, [isFocused]);
 
-  // 🟩 Fetch again when salary gets reloaded in ProfileScreen
-  useEffect(() => {
-    const salaryReloadListener = async () => {
-      const updatedUser = await AsyncStorage.getItem("user");
-      if (updatedUser) {
-        setUser(JSON.parse(updatedUser));
-      }
-    };
-    const interval = setInterval(salaryReloadListener, 1000); // check every 1s for salary update
-    return () => clearInterval(interval);
-  }, []);
-
-  // ➕ Add expense
+  // ➕ Add Expense
   const handleAddExpense = async () => {
-    if (!amount) return Alert.alert("Error", "Please enter an amount");
+  if (!amount) return Alert.alert("Error", "Please enter an amount");
 
-    try {
-      const expenseData = {
-        user_id: user.id,
-        amount,
-        category,
-        note,
-        budget_type: getBudgetType(category),
-        expense_date: new Date().toISOString().split("T")[0],
-      };
+  const enteredAmount = Number(amount);
+  if (isNaN(enteredAmount) || enteredAmount <= 0)
+    return Alert.alert("Error", "Please enter a valid positive number");
 
-      const response = await fetch(`${API_IP}/expenses/add`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(expenseData),
+  const group = getGroup(category);
+  const remainingBudget = getRemainingBudget(group);
+
+  if (enteredAmount > remainingBudget) {
+    return Alert.alert(
+      "Budget Limit Exceeded 🚫",
+      `You only have ₹${remainingBudget.toFixed(0)} remaining for ${
+        group === "basic"
+          ? "Basic Needs"
+          : group === "lifestyle"
+          ? "Lifestyle"
+          : "Savings"
+      }.\nReduce the expense amount to stay within your budget.`
+    );
+  }
+
+  try {
+    const expenseData = {
+      user_id: user.id,
+      amount: enteredAmount,
+      category,
+      note,
+      budget_type: getBudgetType(category),
+      expense_date: new Date().toISOString().split("T")[0],
+    };
+
+    const response = await fetch(`${API_IP}/expenses/add`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(expenseData),
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      Alert.alert("Success", "Expense added successfully");
+      setExpenses([...expenses, expenseData]);
+      setAmount("");
+      setNote("");
+
+      // ✅ Local notification for expense added
+      // await Notifications.scheduleNotificationAsync({
+      //   content: {
+      //     title: "Expense Added 💸",
+      //     body: `₹${enteredAmount} spent on ${category}`,
+      //   },
+      //   trigger: null,
+      // });
+
+      // 🧮 Check for near-limit budgets
+      ["basic", "lifestyle", "savings"].forEach(async (grp) => {
+        const remaining = getRemainingBudget(grp);
+        const percent =
+          grp === "basic" ? 0.5 : grp === "lifestyle" ? 0.3 : 0.2;
+        const allocated = user.salary * percent;
+        const remainingPercent = (remaining / allocated) * 100;
+
+        if (remainingPercent <= 10) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "⚠️ Budget Almost Used",
+              body:
+                grp === "basic"
+                  ? "Your Basic Needs budget is almost exhausted!"
+                  : grp === "lifestyle"
+                  ? "Your Lifestyle budget is nearly complete!"
+                  : "Your Savings allocation is about to finish!",
+            },
+            trigger: null,
+          });
+        }
       });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        Alert.alert("Success", "Expense added successfully");
-        setExpenses([...expenses, expenseData]);
-        setAmount("");
-        setNote("");
-      } else {
-        Alert.alert("Error", result.message || "Something went wrong");
-      }
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "Failed to connect to server");
+    } else {
+      Alert.alert("Error", result.message || "Something went wrong");
     }
-  };
+  } catch (error) {
+    console.error(error);
+    Alert.alert("Error", "Failed to connect to server");
+  }
+};
 
-  const getBudgetType = (category) => {
+
+
+  // 🧠 Helpers
+  const getBudgetType = (category: string) => {
     const basicNeeds = [
       "Rent / Housing",
       "Utilities",
@@ -135,13 +197,14 @@ export default function HomeScreen() {
       "Debt Repayment",
       "Digital Wallet / Savings Account",
     ];
+
     if (basicNeeds.includes(category)) return "50% - Basic Needs";
     if (lifestyle.includes(category)) return "30% - Lifestyle";
     if (savings.includes(category)) return "20% - Savings";
     return "Other";
   };
 
-  const getGroup = (category) => {
+  const getGroup = (category: string) => {
     const basicNeeds = [
       "Rent / Housing",
       "Utilities",
@@ -174,6 +237,7 @@ export default function HomeScreen() {
       "Debt Repayment",
       "Digital Wallet / Savings Account",
     ];
+
     if (basicNeeds.includes(category)) return "basic";
     if (lifestyle.includes(category)) return "lifestyle";
     if (savings.includes(category)) return "savings";
@@ -185,9 +249,10 @@ export default function HomeScreen() {
     return user.salary ? user.salary - totalSpent : 0;
   };
 
-  const getRemainingBudget = (group) => {
+  const getRemainingBudget = (group: string) => {
     if (!user.salary) return 0;
-    let percent = group === "basic" ? 0.5 : group === "lifestyle" ? 0.3 : group === "savings" ? 0.2 : 0;
+    let percent =
+      group === "basic" ? 0.5 : group === "lifestyle" ? 0.3 : group === "savings" ? 0.2 : 0;
     const allocated = user.salary * percent;
     const spent = expenses
       .filter((exp) => getGroup(exp.category) === group)
@@ -197,7 +262,14 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: theme.background }}>
+      <SafeAreaView
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: theme.background,
+        }}
+      >
         <Text style={{ color: theme.text }}>Loading...</Text>
       </SafeAreaView>
     );
@@ -208,12 +280,12 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={{ padding: 10 }}>
         <LogoHeader />
         <Text style={[styles.title, { color: theme.text }]}>Hi, {user.name}</Text>
-        <Text style={[styles.subtitle, { color: theme.text }]}> Salary: ₹{user.salary} </Text>
+        <Text style={[styles.subtitle, { color: theme.text }]}>Salary: ₹{user.salary}</Text>
         <Text style={[styles.subtitle, { color: theme.text, marginTop: 10 }]}>
           Remaining Salary: ₹{getRemainingSalary().toFixed(0)}
         </Text>
 
-        {/* Add Expense Section */}
+        {/* Add Expense */}
         <Text style={[styles.label, { color: theme.text }]}>Add Expense</Text>
         <View style={[styles.pickerContainer, { borderColor: theme.primary }]}>
           <Picker
@@ -222,32 +294,37 @@ export default function HomeScreen() {
             style={{ color: theme.text }}
             dropdownIconColor={theme.text}
           >
-            <Picker.Item label="Rent / Housing" value="Rent / Housing" />
-            <Picker.Item label="Utilities (Electricity, Water, Gas)" value="Utilities" />
-            <Picker.Item label="Groceries" value="Groceries" />
-            <Picker.Item label="Transportation (Fuel, Bus, Train, Taxi)" value="Transportation" />
-            <Picker.Item label="Insurance (Health, Vehicle, Home)" value="Insurance" />
-            <Picker.Item label="Loan / EMI Payments" value="Loan / EMI Payments" />
-            <Picker.Item label="Medical & Healthcare" value="Medical & Healthcare" />
-            <Picker.Item label="Childcare / Education Fees" value="Childcare / Education Fees" />
-            <Picker.Item label="Phone & Internet Bills" value="Phone & Internet Bills" />
-            <Picker.Item label="Dining Out / Restaurants" value="Dining Out / Restaurants" />
-            <Picker.Item label="Entertainment" value="Entertainment" />
-            <Picker.Item label="Shopping" value="Shopping" />
-            <Picker.Item label="Travel & Vacation" value="Travel & Vacation" />
-            <Picker.Item label="Fitness" value="Fitness" />
-            <Picker.Item label="Gifts & Celebrations" value="Gifts & Celebrations" />
-            <Picker.Item label="Home Décor / Luxury Items" value="Home Décor / Luxury Items" />
-            <Picker.Item label="Emergency Repair" value="Emergency Repair" />
-            <Picker.Item label="Emergency Fund" value="Emergency Fund" />
-            <Picker.Item label="FD / RD" value="FD / RD" />
-            <Picker.Item label="Mutual Funds / SIP" value="Mutual Funds / SIP" />
-            <Picker.Item label="Stock Market Investments" value="Stock Market Investments" />
-            <Picker.Item label="Retirement Fund" value="Retirement Fund" />
-            <Picker.Item label="Insurance Savings Plan" value="Insurance Savings Plan" />
-            <Picker.Item label="Gold / Real Estate" value="Gold / Real Estate" />
-            <Picker.Item label="Debt Repayment" value="Debt Repayment" />
-            <Picker.Item label="Digital Wallet / Savings Account" value="Digital Wallet / Savings Account" />
+            {/* 🏠 Basic Needs */}
+            <Picker.Item label="🏠 Rent / Housing" value="Rent / Housing" />
+            <Picker.Item label="💡 Utilities (Water, Electricity)" value="Utilities" />
+            <Picker.Item label="🛒 Groceries" value="Groceries" />
+            <Picker.Item label="🚌 Transportation" value="Transportation" />
+            <Picker.Item label="🩺 Medical & Healthcare" value="Medical & Healthcare" />
+            <Picker.Item label="📞 Phone & Internet Bills" value="Phone & Internet Bills" />
+            <Picker.Item label="💳 Loan / EMI Payments" value="Loan / EMI Payments" />
+            <Picker.Item label="👶 Childcare / Education Fees" value="Childcare / Education Fees" />
+            <Picker.Item label="🧾 Insurance" value="Insurance" />
+
+            {/* 💃 Lifestyle */}
+            <Picker.Item label="🍽 Dining Out / Restaurants" value="Dining Out / Restaurants" />
+            <Picker.Item label="🎬 Entertainment" value="Entertainment" />
+            <Picker.Item label="🛍 Shopping" value="Shopping" />
+            <Picker.Item label="✈️ Travel & Vacation" value="Travel & Vacation" />
+            <Picker.Item label="🏋️‍♂️ Fitness / Gym" value="Fitness" />
+            <Picker.Item label="🎁 Gifts & Celebrations" value="Gifts & Celebrations" />
+            <Picker.Item label="🏡 Home Décor / Luxury Items" value="Home Décor / Luxury Items" />
+            <Picker.Item label="🔧 Emergency Repair" value="Emergency Repair" />
+
+            {/* 💰 Savings */}
+            <Picker.Item label="💵 Emergency Fund" value="Emergency Fund" />
+            <Picker.Item label="🏦 FD / RD" value="FD / RD" />
+            <Picker.Item label="📈 Mutual Funds / SIP" value="Mutual Funds / SIP" />
+            <Picker.Item label="📊 Stock Market Investments" value="Stock Market Investments" />
+            <Picker.Item label="👴 Retirement Fund" value="Retirement Fund" />
+            <Picker.Item label="🛡 Insurance Savings Plan" value="Insurance Savings Plan" />
+            <Picker.Item label="🏠 Gold / Real Estate" value="Gold / Real Estate" />
+            <Picker.Item label="💸 Debt Repayment" value="Debt Repayment" />
+            <Picker.Item label="💳 Digital Wallet / Savings Account" value="Digital Wallet / Savings Account" />
           </Picker>
         </View>
 
@@ -267,18 +344,24 @@ export default function HomeScreen() {
           onChangeText={setNote}
           multiline
         />
-        <TouchableOpacity style={[styles.btn, { backgroundColor: theme.primary }]} onPress={handleAddExpense}>
+        <TouchableOpacity
+          style={[styles.btn, { backgroundColor: theme.primary }]}
+          onPress={handleAddExpense}
+        >
           <Text style={[styles.btnText, { color: theme.accent }]}>Add+</Text>
         </TouchableOpacity>
 
-        {/* Budget Summary */}
+        {/* Budget Circles */}
         <View style={styles.budgetContainer}>
           {[{ percent: 50, group: "basic" }, { percent: 30, group: "lifestyle" }, { percent: 20, group: "savings" }].map(
             ({ percent, group }, i) => {
               if (!user.salary) return null;
               const allocated = user.salary * (percent / 100);
               const remaining = getRemainingBudget(group);
-              const fillValue = allocated > 0 ? Math.max(0, Math.min((remaining / allocated) * 100, 100)) : 0;
+              const fillValue =
+                allocated > 0
+                  ? Math.max(0, Math.min((remaining / allocated) * 100, 100))
+                  : 0;
 
               return (
                 <View key={i} style={styles.budgetItem}>
@@ -288,7 +371,7 @@ export default function HomeScreen() {
                   <Text style={[styles.budgetAmount, { color: theme.text }]}>
                     Remaining: ₹{remaining.toFixed(0)} / ₹{allocated.toFixed(0)}
                   </Text>
-                  <View style={{ width: 100, alignItems: "center", marginTop: 10, }}>
+                  <View style={{ width: 100, alignItems: "center", marginTop: 10 }}>
                     <AnimatedCircularProgress
                       size={80}
                       width={8}
