@@ -16,6 +16,7 @@ export default function BottomNav() {
     { name: "Analytics", icon: "stats-chart-outline", route: "/analytics" },
     { name: "Notifications", icon: "notifications-outline", route: "/notification" },
     { name: "Profile", icon: "person-outline", route: "/profile" },
+    { name: "AI Suggestions", icon: "bulb-outline", route: "/aisuggestions" },
     
   ];
 
